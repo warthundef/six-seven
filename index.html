@@ -1,10 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>8时46分 · 曼哈顿上空 · v2.1</title>
+<title>8时46分 · 曼哈顿上空 · v3.0</title>
 <style>
   :root{ --ink:#dfe9f2; --accent:#a8d4f0; --warn:#ff9b9b; --mute:#8fa3b8; --card:rgba(11,18,28,.86); }
   *{box-sizing:border-box}
@@ -16,17 +16,8 @@
   #cv{display:block;width:100%;height:100%}
   #hud{position:absolute;left:0;right:0;top:0;padding-top:calc(13px + env(safe-area-inset-top));text-align:center;pointer-events:none}
   #clock{font-size:15px;letter-spacing:.14em;color:var(--accent);opacity:.92;font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,.8)}
-  #ticker{position:absolute;left:0;right:0;top:40px;display:flex;flex-direction:column;gap:2px;pointer-events:none}
-  .row{display:flex;align-items:center;height:20px;background:rgba(8,14,22,.62);overflow:hidden}
-  .row .tag{flex:0 0 auto;font-size:10px;letter-spacing:.18em;padding:0 7px;opacity:.9}
-  .row.warn .tag{color:var(--warn)}
-  .row.dim .tag{color:var(--mute)}
-  .row .track{position:relative;flex:1;height:20px;overflow:hidden}
-  .row .ttext{position:absolute;left:0;top:0;white-space:nowrap;font-size:11.5px;line-height:20px;letter-spacing:.06em;
-    animation:slide linear forwards;will-change:transform}
-  .row.warn .ttext{color:#ffd9d9}
-  .row.dim .ttext{color:#a9bccd}
-  @keyframes slide{from{transform:translateX(0)}to{transform:translateX(var(--dist))}}
+  #phint{margin:-12px 0 20px;font-size:11px;line-height:1.7;letter-spacing:.06em;color:rgba(168,212,240,.52)}
+  #phint[hidden]{display:none}
   #pad{position:absolute;left:calc(16px + env(safe-area-inset-left));bottom:calc(16px + env(safe-area-inset-bottom));
     border-radius:50%;border:1px solid rgba(168,212,240,.13);background:rgba(168,212,240,.035);opacity:.85}
   #knob{position:absolute;left:50%;top:50%;border-radius:50%;background:rgba(168,212,240,.16);
@@ -47,18 +38,47 @@
   #sharebtn{background:transparent;color:rgba(168,212,240,.8);border:1px solid rgba(168,212,240,.28);
     padding:10px 16px;font-size:12px;letter-spacing:.12em}
   #sharebtn[hidden]{display:none}
+  /* ---------- 隐藏结局：暖米色卡，与失败卡的冷蓝一眼可分（只在 #popup.win 下生效） ---------- */
+  #popup.win{background:rgba(10,8,6,.30)}
+  #popup.win #card{background:rgba(26,21,16,.88);border-color:rgba(240,220,184,.22)}
+  #popup.win #ptitle{color:#f0dcb8}
+  #popup.win #ptext{color:#ece0cd}
+  #popup.win #pbtn{background:#e8cfa6;color:#20180e}
+  #popup.win #sharebtn{color:rgba(240,220,184,.80);border-color:rgba(240,220,184,.28)}
+  /* ---------- 暂停键：低对比小圆点，浮在右上角 ---------- */
+  #pausebtn{
+    position:absolute; right:10px; top:calc(8px + env(safe-area-inset-top));
+    width:36px; height:36px; padding:0; border-radius:50%;
+    background:rgba(168,212,240,.07);
+    border:1px solid rgba(168,212,240,.18);
+    display:flex; align-items:center; justify-content:center;
+    z-index:6; cursor:pointer;
+    transition:background .18s, border-color .18s, transform .12s;
+  }
+  #pausebtn svg{width:16px; height:16px; display:block}
+  #pausebtn svg *{fill:rgba(214,231,244,.60); transition:fill .18s}
+  #pausebtn:active{transform:scale(.94)}
+  #pausebtn.on{background:rgba(168,212,240,.14); border-color:rgba(168,212,240,.30)}
+  #pausebtn.on svg *{fill:rgba(222,238,250,.88)}
+  #pausebtn[hidden]{display:none}
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="cv"></canvas>
   <div id="hud"><div id="clock">9月11日 8时46分</div></div>
-  <div id="ticker"></div>
   <div id="pad"><div id="knob"></div></div>
+  <button id="pausebtn" type="button" aria-label="暂停" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <g id="pic-pause"><rect x="8" y="7" width="2.6" height="10" rx="1.2"/><rect x="13.4" y="7" width="2.6" height="10" rx="1.2"/></g>
+      <g id="pic-play" style="display:none"><path d="M9 6.6 L17 12 L9 17.4 Z"/></g>
+    </svg>
+  </button>
   <div id="popup">
     <div id="card">
       <h1 id="ptitle">8时46分</h1>
       <p id="ptext">载入中…</p>
+      <p id="phint" hidden>右上角可随时暂停 · 不扣时间</p>
       <div id="prow"><button id="pbtn" disabled>开始</button><button id="sharebtn" hidden>分享</button></div>
     </div>
   </div>
@@ -98,6 +118,8 @@ var EBASE  = 63;                // Hard-1  敌人速度 = 63 + 2.45 × 已过秒
 var EACC   = 2.45;
 var JUDGE  = 0.55;              // Hard-2  判定半径 = 视觉半径 × 0.55（同一个半径变量、同一个系数）
                                 // Hard-3  无惯性：位移 = 输入 × 速度 × dt，无加速度/摩擦/缓动/滑行
+var DIFF = 1.0;                 // §0c 全局难度总旋钮：1.0 = 对齐台风游戏；0.85 更简单，1.15 更难
+                                //     只调这一个数就能整体调档（影响峰值半径与出怪间隔地板）
 
 /* ---------------- §2 设计分辨率与常量 ---------------- */
 var W = 400, H = 700, M = 700;
@@ -105,9 +127,9 @@ var BX0 = 30, BX1 = 370, BY0 = 30, BY1 = 670;   // §5 位置 clamp 边界
 var KN = 44;                                    // §5 摇杆半径（逻辑像素）
 var PW = 76, PH = 158;                         // §1 玩家可视占位
 var PNP = 60;                                   // §14.3 判定采样点数（仅降级轮廓用）
-var DIM = 0.28;                                 // 实景底图压暗系数（0=原图，1=全黑）
+var DIM = 0.32;                                 // 实景底图压暗系数（0=原图，1=全黑）；0.32 让白客机更跳
 var DTMAX = 0.05;                               // §4 dt 上限
-var MAXTY = 7;                                  // §12.4 同屏上限
+var MAXTY = 6;                                  // §12.4 同屏上限（对齐原版：最多 6 架）
 var TAU = Math.PI * 2;
 
 /* ---------------- DOM ---------------- */
@@ -115,8 +137,10 @@ var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 var stage = document.getElementById('stage'), popup = document.getElementById('popup');
 var ptitle = document.getElementById('ptitle'), ptext = document.getElementById('ptext');
 var pbtn = document.getElementById('pbtn'), sharebtn = document.getElementById('sharebtn');
-var clockEl = document.getElementById('clock'), ticker = document.getElementById('ticker');
+var phint = document.getElementById('phint');
+var clockEl = document.getElementById('clock');
 var pad = document.getElementById('pad'), knob = document.getElementById('knob');
+var pausebtn = document.getElementById('pausebtn');
 
 /* ---------------- 缩放（§2：逻辑坐标恒定 400×700，等比缩放居中留黑边） ---------------- */
 var SC = 1, K = 1, KR = KN, DPR = 1;
@@ -158,11 +182,11 @@ function hudText(c) { return (c.day > 0 ? '次日' : '9月11日') + ' ' + c.h12 
 function titleText(c) { return '纽约，2001年9月11日' + (c.day > 0 ? '次日' : '') + ' ' + c.h12 + '时' + pad2(c.mm) + '分'; }
 
 /* ---------------- §6b 地点池：无序集合，纯查表，无状态、无顺序、无去重 ---------------- */
+// 只保留双子塔；两枚锚点分别落在塔身自己的左半 / 右半，分界线 = 塔中线 x=199
+// 左半中心 199 − 76/4 = 180，右半中心 199 + 76/4 = 218；y 取塔身中心 (279+437)/2 = 358
 var SITES = [
-  { x: 262, y: 232, name: '纽约世界贸易中心北塔', text: '撞击纽约世界贸易中心北塔' },
-  { x: 262, y: 300, name: '纽约世界贸易中心南塔', text: '撞击纽约世界贸易中心南塔' },
-  { x: 170, y: 470, name: '华盛顿五角大楼',       text: '撞击华盛顿五角大楼' },
-  { x: 120, y: 390, name: '宾夕法尼亚州某处',     text: '在宾夕法尼亚州坠毁' }
+  { x: 180, y: 358, name: '纽约世界贸易中心北塔', text: '撞击纽约世界贸易中心北塔' },
+  { x: 218, y: 358, name: '纽约世界贸易中心南塔', text: '撞击纽约世界贸易中心南塔' }
 ];
 // 取最近锚点（不用 if-else 顺序链，避免隐式优先级）
 function siteOf(px, py) {
@@ -203,6 +227,7 @@ function artTick() {
   if (!running && !over) {
     ptitle.textContent = '8时46分';
     ptext.textContent = '拖动世贸双塔，避开从四面八方袭来的客机。\n你躲开的每一秒，都在替纽约走完今天的时刻。';
+    phint.hidden = false;
     pbtn.textContent = '开始';
   }
   draw();
@@ -212,6 +237,11 @@ function artTick() {
 var jp = null;                       // 玩家中心（逻辑坐标）
 var ty = [];                         // 威胁数组
 var elapsed = 0, over = false, running = false, spawnT = 0, tyNo = 0;
+var paused = false;                  // 用户主动暂停：冻结一切推进
+var holdT = 0;                       // 恢复前的反应期（真实秒，不走游戏时间）
+var win = false;                     // 隐藏结局：已进入（存活满 60 秒）
+var winT = 0;                        // 定格计时（真实秒）
+var winShown = false;                // 结局卡是否已弹出
 var vx = 0, vy = 0, last = 0, raf = 0, hit = null;
 var keys = {};
 
@@ -311,7 +341,7 @@ function spawn() {
     no: ++tyNo, pat: pat,
     x: x, y: y,
     r: M * 0.015,                       // 视觉半径（判定一律用它 × 0.55）
-    rPeak: M * 0.05 + Math.random() * M * 0.035,
+    rPeak: (M * 0.043 + Math.random() * M * 0.030) * DIFF,   // 视觉半径 30.1–51.1（判定 16.6–28.1）
     growT: 3 + Math.random() * 3,
     decay: false, entered: false, stalled: false,
     ang: 0, timer: pat.segMin + Math.random() * (pat.segMax - pat.segMin),
@@ -323,7 +353,6 @@ function spawn() {
   t.ang = toward(t) + (Math.random() - 0.5) * 0.8;
   setForecast(t);
   ty.push(t);
-  news('不明航机 ' + t.no + ' 号（' + pat.name + '）进入空域', 'warn', '出现');
 }
 
 /* ---------------- §9 预判：读实时航向/速度/剩余时长/生长率，向外推演 ---------------- */
@@ -338,6 +367,19 @@ function setForecast(t) {
 
 /* ---------------- 每帧推进 ---------------- */
 function update(dt) {
+  // 隐藏结局：玩家、飞机、时钟、出怪、判定全部静止，只推进 1.2 秒的真实计时
+  if (win) {
+    winT += dt;
+    if (!winShown && winT >= 1.2) { winShown = true; running = false; showWin(); draw(); }
+    return;
+  }
+  // 暂停 / 反应期：elapsed、jp、ty[]、spawnT、判定与 die() 全部冻结（draw() 照常）
+  if (paused) { return; }
+  if (holdT > 0) {
+    holdT -= dt;
+    if (holdT < 0) holdT = 0;
+    return;
+  }
   if (over) {
     // §8 失败后：全局时间 ×0.3 慢动作（只减速，不再推进游戏时钟、不再接受输入）
     dt *= 0.3;
@@ -350,6 +392,9 @@ function update(dt) {
   }
 
   elapsed += dt;
+
+  // 隐藏结局：先判存活满 60 秒，再做碰撞判定 —— 第 60 秒那一帧即使客机压上来，也判活下来了
+  if (!win && elapsed >= 60) { winStart(); return; }
 
   // 玩家：无惯性，输入直接成速度；撞边即停，不反弹
   jp.x = Math.max(BX0, Math.min(BX1, jp.x + vx * PSPEED * dt));
@@ -385,19 +430,17 @@ function update(dt) {
 
     if (t.r <= M * 0.012 || t.life <= 0) {
       ty.splice(i, 1);
-      news('航机 ' + t.no + ' 号（' + pt.name + '）已消散', 'dim', '消散');
     } else if (!t.entered && t.x > 0 && t.x < W && t.y > 0 && t.y < H) {
       t.entered = true;
     } else if ((t.entered && (t.x < -t.r || t.x > W + t.r || t.y < -t.r || t.y > H + t.r)) ||
                t.x < -150 || t.x > W + 150 || t.y < -150 || t.y > H + 150) {
       ty.splice(i, 1);
-      news('航机 ' + t.no + ' 号（' + pt.name + '）离开空域', 'dim', '消散');
     }
   }
 
   // §7 出怪：4 秒收敛到 1.5 秒
   spawnT += dt;
-  var interval = Math.max(1.5, 4 - elapsed * 0.08);
+  var interval = Math.max(1.8, 4 - elapsed * 0.08) / DIFF;   // 地板 1.8s：晚期 0.56 架/秒，前 27 秒不变
   if (spawnT > interval && ty.length < MAXTY) { spawnT = 0; spawn(); }
 
   // §8 判定：玩家轮廓逐点 vs 威胁半径 × 0.55
@@ -410,6 +453,9 @@ function update(dt) {
 /* ---------------- §8 失败 ---------------- */
 function die(px, py) {
   over = true;
+  paused = false; holdT = 0;
+  syncPauseIcon();
+  pausebtn.hidden = true;                  // 结算期间不提供暂停
   release();                        // 清空输入
   keys = {};
   var c = gameClock(elapsed);
@@ -430,6 +476,30 @@ function showResult() {
     '一架被劫持的民航客机' + s.text + '，\n造成大量人员伤亡。';
   pbtn.textContent = '再来一次';
   sharebtn.hidden = false;
+  pausebtn.hidden = true;
+  phint.hidden = true;
+  popup.classList.remove('hide');
+}
+
+/* ---------------- §10b 隐藏结局：存活满 60 秒（08:46 → 09:46） ---------------- */
+function winStart() {
+  win = true; winT = 0; winShown = false;
+  if (paused) { paused = false; holdT = 0; syncPauseIcon(); }   // 停在暂停里也先解除
+  release(); keys = {};                    // 清空输入
+  pausebtn.hidden = true;                  // 定格期间不提供暂停
+}
+function showWin() {
+  var c = gameClock(elapsed);              // elapsed = 60 → 9时46分
+  popup.classList.add('win');
+  ptitle.textContent = '纽约，2001年9月11日 上午 ' + c.h12 + '时' + pad2(c.mm) + '分';
+  ptext.textContent =
+    '纽约的清晨依旧匆忙。\n' +
+    '地铁里人们低头看报，咖啡杯冒着热气。\n' +
+    '双子塔的影子斜斜铺在街道上，游客举着相机笑，街角的热狗摊排着队。\n' +
+    '911从未发生—— 纽约，2001年9月11日 上午' + c.h12 + '时' + pad2(c.mm) + '分';
+  pbtn.textContent = '再来一次';
+  sharebtn.hidden = false;
+  phint.hidden = true;
   popup.classList.remove('hide');
 }
 
@@ -464,6 +534,48 @@ function draw() {
   for (var i = 0; i < ty.length; i++) drawThreat(ty[i]);
 
   clockEl.textContent = hudText(gameClock(elapsed));
+
+  // 隐藏结局：0.9 秒内把画面从冷调缓慢提亮到 +10% 暖白，然后停住（不闪、不跳、不黑屏）
+  if (win) {
+    var k2 = Math.min(1, winT / 0.9);
+    ctx.fillStyle = 'rgba(255,246,232,' + (0.10 * k2) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 暂停反馈：整体压暗 18% + 中央暂停符号 + 「已暂停」（每帧重绘，状态天然同步）
+  if (paused) {
+    ctx.fillStyle = 'rgba(4,7,12,.18)';          // 整体压暗 18%，让"世界停了"一眼可辨
+    ctx.fillRect(0, 0, W, H);
+
+    var cy0 = H / 2;
+    ctx.strokeStyle = 'rgba(214,231,244,.26)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(W / 2, cy0, 34, 0, TAU); ctx.stroke();
+
+    ctx.fillStyle = 'rgba(214,231,244,.42)';     // 中央暂停符号：两根竖条
+    ctx.fillRect(W / 2 - 8, cy0 - 11, 6, 22);
+    ctx.fillRect(W / 2 + 2, cy0 - 11, 6, 22);
+
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(214,231,244,.50)';
+    ctx.fillText('已暂停', W / 2, cy0 + 58);
+    ctx.textAlign = 'left';                       // 复位，避免影响后续绘制
+  }
+
+  // 恢复那 1 秒：压暗立刻消失，留一个从 40px 收到 6px 的圆环 + 「准备」
+  if (holdT > 0) {
+    var k3 = holdT;                               // 1 → 0
+    ctx.strokeStyle = 'rgba(214,231,244,.30)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(W / 2, H / 2, 34 * k3 + 6, 0, TAU); ctx.stroke();
+
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(214,231,244,.42)';
+    ctx.fillText('准备', W / 2, H / 2 + 58);
+    ctx.textAlign = 'left';
+  }
 }
 
 function drawPlayer() {
@@ -482,8 +594,8 @@ function drawPlayer() {
     ctx.save();
     ctx.translate(-PW / 2, -PH / 2);
     ctx.scale(PW / HITW, PH / HITH);
-    ctx.strokeStyle = 'rgba(168,212,240,.30)';
-    ctx.lineWidth = 0.9 * HITW / PW;
+    ctx.strokeStyle = 'rgba(168,212,240,.42)';   // 可读性：判定轮廓更清楚一点
+    ctx.lineWidth = 1.0 * HITW / PW;
     ctx.stroke(HITPATH);
     ctx.restore();
   }
@@ -580,32 +692,6 @@ function drawThreat(t) {
   ctx.stroke();
 }
 
-/* ---------------- §10 消息条：只播报威胁本身的发生与消散 ---------------- */
-function news(msg, cls, tag) {
-  var row = document.createElement('div');
-  row.className = 'row ' + cls;
-  var tg = document.createElement('div');
-  tg.className = 'tag';
-  tg.textContent = tag;
-  var tr = document.createElement('div');
-  tr.className = 'track';
-  var tt = document.createElement('div');
-  tt.className = 'ttext';
-  tt.textContent = msg;
-  tr.appendChild(tt);
-  row.appendChild(tg);
-  row.appendChild(tr);
-  ticker.appendChild(row);
-  while (ticker.children.length > 3) ticker.removeChild(ticker.firstChild);
-
-  var dist = tr.clientWidth + tt.offsetWidth;
-  var dur = dist / 300;                    // 滚动时长 = 距离 / 300（秒）
-  tt.style.setProperty('--dist', -dist + 'px');
-  tt.style.animationDuration = dur + 's';
-  tt.addEventListener('animationend', function () { if (row.parentNode) row.parentNode.removeChild(row); });
-  setTimeout(function () { if (row.parentNode) row.parentNode.removeChild(row); }, dur * 1000 + 600);
-}
-
 /* ---------------- 输入（§5）：摇杆 + 键盘；无惯性 ---------------- */
 var active = false, pid = null, cx0 = 0, cy0 = 0;
 function setKnob(clientX, clientY) {
@@ -626,7 +712,7 @@ function keyVel() {
 
 function onDown(e) {
   if (over || !running || active) return;
-  if (e.target.closest('#popup') || e.target.closest('#ticker')) return;
+  if (e.target.closest('#popup')) return;
   active = true;
   pid = e.pointerId;
   try { stage.setPointerCapture(e.pointerId); } catch (err) {}
@@ -676,10 +762,41 @@ if (window.PointerEvent) {
 
 window.addEventListener('keydown', function (e) {
   if (over) return;
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); e.preventDefault(); return; }
   if (!keys[e.key]) { keys[e.key] = true; keyVel(); }
   if (e.key.indexOf('Arrow') === 0) e.preventDefault();
 });
 window.addEventListener('keyup', function (e) { keys[e.key] = false; keyVel(); });
+/* 切窗口：keyup 会丢，清掉按住的键，防止回来时自己往一个方向跑 */
+window.addEventListener('blur', function () {
+  keys = {}; release();
+});
+
+/* ---------------- 暂停键：冻结 / 恢复（不改任何玩法数值） ---------------- */
+function syncPauseIcon() {
+  var pp = document.getElementById('pic-pause'), pl = document.getElementById('pic-play');
+  if (pp) pp.style.display = paused ? 'none' : '';
+  if (pl) pl.style.display = paused ? '' : 'none';
+  pausebtn.classList.toggle('on', paused);
+}
+function togglePause() {
+  if (!running || over) return;                   // 未开局 / 已结算：忽略
+  if (!paused) { paused = true; holdT = 0; }      // 暂停
+  else { paused = false; holdT = 1.0; }           // 继续：先给 1 秒反应期
+  syncPauseIcon();
+}
+pausebtn.addEventListener('click', togglePause);
+/* 事件隔离：别让点按钮同时带动摇杆 */
+['pointerdown', 'touchstart', 'mousedown'].forEach(function (ev) {
+  pausebtn.addEventListener(ev, function (e) { e.stopPropagation(); e.preventDefault(); }, { passive: false });
+});
+/* 页面切后台：回来时自动解除暂停并给 1 秒反应期，防止一回来就被在场的客机撞死 */
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'hidden') return;
+  if (!running || over) return;
+  paused = false; holdT = 1.0;
+  syncPauseIcon();
+});
 
 /* ---------------- §13 主循环 ---------------- */
 function loop(now) {
@@ -695,16 +812,21 @@ function loop(now) {
 function init() {
   cancelAnimationFrame(raf);
   ty = []; elapsed = 0; over = false; running = false; spawnT = 0; tyNo = 0; hit = null;
+  paused = false; holdT = 0;               // 复位暂停态
+  win = false; winT = 0; winShown = false; // 复位隐藏结局
+  popup.classList.remove('win');           // 卡片配色回到（失败卡的）冷蓝
+  if (pausebtn) { pausebtn.hidden = true; }
+  syncPauseIcon();
   jp = { x: 199, y: 358 };               // 起点：世界贸易中心
   keys = {};
   release();
-  ticker.innerHTML = '';
   popup.classList.remove('hide');
   sharebtn.hidden = true;
   ptitle.textContent = '8时46分';
   ptext.textContent = READY
     ? '拖动世贸双塔，避开从四面八方袭来的客机。\n你躲开的每一秒，都在替纽约走完今天的时刻。'
     : '载入中…';
+  phint.hidden = !READY;
   pbtn.textContent = '开始';
   pbtn.disabled = !READY;
   draw();
@@ -712,9 +834,14 @@ function init() {
 
 function start() {
   if (!READY || running) return;
-  if (over) { init(); popup.classList.add('hide'); running = true; spawn(); last = performance.now(); raf = requestAnimationFrame(loop); return; }
+  keys = {}; release();                    // 清掉在开始弹窗上按下的方向键（预输入）
+  if (over || win) init();                 // 重开：复位一切（含暂停态与隐藏结局）
   popup.classList.add('hide');
+  phint.hidden = true;
   running = true;
+  paused = false; holdT = 0;
+  syncPauseIcon();
+  pausebtn.hidden = false;                 // 开局后暂停键才出现
   spawn();
   last = performance.now();
   raf = requestAnimationFrame(loop);
@@ -723,11 +850,20 @@ pbtn.addEventListener('click', start);
 
 /* ---------------- §10 分享 ---------------- */
 sharebtn.addEventListener('click', function () {
-  if (!hit) return;
-  var c = hit.clock, s = hit.site;
-  var body = ptext.textContent;
-  var line = '纽约，2001年9月11日 ' + c.h12 + '时' + pad2(c.mm) + '分 · ' + s.text;
-  var text = body + '\n—— ' + line;
+  var text;
+  if (win) {                                   // 隐藏结局：发的是「911 从未发生」
+    var cw = gameClock(elapsed);
+    text = '纽约的清晨依旧匆忙。\n' +
+      '地铁里人们低头看报，咖啡杯冒着热气。\n' +
+      '双子塔的影子斜斜铺在街道上，游客举着相机笑，街角的热狗摊排着队。\n' +
+      '911从未发生—— 纽约，2001年9月11日 上午' + cw.h12 + '时' + pad2(cw.mm) + '分';
+  } else {                                     // 失败结算：原文案，一个字不改
+    if (!hit) return;
+    var c = hit.clock, s = hit.site;
+    var body = ptext.textContent;
+    var line = '纽约，2001年9月11日 ' + c.h12 + '时' + pad2(c.mm) + '分 · ' + s.text;
+    text = body + '\n—— ' + line;
+  }
   if (navigator.share) {
     navigator.share({ title: '8时46分', text: text }).catch(function () {});
     return;
