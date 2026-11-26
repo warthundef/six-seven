@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>8时46分 · 曼哈顿上空 · v3.1</title>
+<title>8时46分 · 曼哈顿上空 · v3.2</title>
 <style>
   :root{ --ink:#dfe9f2; --accent:#a8d4f0; --warn:#ff9b9b; --mute:#8fa3b8; --card:rgba(11,18,28,.86); }
   *{box-sizing:border-box}
@@ -116,6 +116,7 @@ if (!Element.prototype.closest) {
 var PSPEED = 87.5;              // Hard-1  玩家速度恒定 87.5 逻辑像素/秒
 var EBASE  = 63;                // Hard-1  敌人速度 = 63 + 2.45 × 已过秒数
 var EACC   = 2.45;
+var ECAP   = 120;               // 飞机基准速度上限（23.3 秒到顶，之后不再加速）
 var JUDGE  = 0.55;              // Hard-2  判定半径 = 视觉半径 × 0.55（同一个半径变量、同一个系数）
                                 // Hard-3  无惯性：位移 = 输入 × 速度 × dt，无加速度/摩擦/缓动/滑行
 var DIFF = 1.0;                 // §0c 全局难度总旋钮：1.0 = 对齐台风游戏；0.85 更简单，1.15 更难
@@ -129,7 +130,7 @@ var PW = 76, PH = 158;                         // §1 玩家可视占位
 var PNP = 60;                                   // §14.3 判定采样点数（仅降级轮廓用）
 var DIM = 0.32;                                 // 实景底图压暗系数（0=原图，1=全黑）；0.32 让白客机更跳
 var DTMAX = 0.05;                               // §4 dt 上限
-var MAXTY = 6;                                  // §12.4 同屏上限（对齐原版：最多 6 架）
+var MAXTY = 5;                                  // §12.4 同屏上限（5 架：晚期不再挤成一团）
 var TAU = Math.PI * 2;
 
 /* ---------------- DOM ---------------- */
@@ -324,7 +325,7 @@ var PATS = [
 function toward(t) { return Math.atan2(jp.y - t.y, jp.x - t.x); }
 // Hard-1：基准速度 63 + 2.45×已过秒数；模式系数只表达"同速下限内的机种差异"
 function enemySpeed(t) {
-  var base = EBASE + EACC * elapsed;
+  var base = Math.min(EBASE + EACC * elapsed, ECAP);
   return t.stalled ? base * 0.15 : base * t.spd;
 }
 
@@ -440,7 +441,7 @@ function update(dt) {
 
   // §7 出怪：4 秒收敛到 1.5 秒
   spawnT += dt;
-  var interval = Math.max(1.8, 4 - elapsed * 0.08) / DIFF;   // 地板 1.8s：晚期 0.56 架/秒，前 27 秒不变
+  var interval = Math.max(2.5, 4 - elapsed * 0.08) / DIFF;   // 地板 2.5s：前 18.75 秒不变，之后每 2.5 秒一架
   if (spawnT > interval && ty.length < MAXTY) { spawnT = 0; spawn(); }
 
   // §8 判定：玩家轮廓逐点 vs 威胁半径 × 0.55
