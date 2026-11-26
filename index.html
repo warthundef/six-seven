@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>8时46分 · 曼哈顿上空 · v3.0</title>
+<title>8时46分 · 曼哈顿上空 · v3.1</title>
 <style>
   :root{ --ink:#dfe9f2; --accent:#a8d4f0; --warn:#ff9b9b; --mute:#8fa3b8; --card:rgba(11,18,28,.86); }
   *{box-sizing:border-box}
@@ -48,7 +48,7 @@
   /* ---------- 暂停键：低对比小圆点，浮在右上角 ---------- */
   #pausebtn{
     position:absolute; right:10px; top:calc(8px + env(safe-area-inset-top));
-    width:36px; height:36px; padding:0; border-radius:50%;
+    width:40px; height:40px; padding:0; border-radius:50%;
     background:rgba(168,212,240,.07);
     border:1px solid rgba(168,212,240,.18);
     display:flex; align-items:center; justify-content:center;
@@ -785,10 +785,30 @@ function togglePause() {
   else { paused = false; holdT = 1.0; }           // 继续：先给 1 秒反应期
   syncPauseIcon();
 }
-pausebtn.addEventListener('click', togglePause);
-/* 事件隔离：别让点按钮同时带动摇杆 */
-['pointerdown', 'touchstart', 'mousedown'].forEach(function (ev) {
-  pausebtn.addEventListener(ev, function (e) { e.stopPropagation(); e.preventDefault(); }, { passive: false });
+/* 点击怎么触发：pointerdown 直接触发 togglePause，不再依赖 click
+   （pointerdown 里 preventDefault 会抑制后续 click，手机端 touchstart 曾因此永远点不到）
+   stopPropagation 必须保留，否则点按钮会同时带动底下的摇杆 */
+if (window.PointerEvent) {
+  pausebtn.addEventListener('pointerdown', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    togglePause();                       // 直接在这里触发，不再依赖 click
+  }, { passive: false });
+} else {
+  pausebtn.addEventListener('touchstart', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    togglePause();
+  }, { passive: false });
+  pausebtn.addEventListener('mousedown', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    togglePause();
+  });
+}
+/* 键盘可达性：按钮用 Tab 聚焦后回车 / 空格也能触发（游戏内 P / Esc 仍然有效） */
+pausebtn.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePause(); }
 });
 /* 页面切后台：回来时自动解除暂停并给 1 秒反应期，防止一回来就被在场的客机撞死 */
 document.addEventListener('visibilitychange', function () {
