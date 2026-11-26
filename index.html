@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>8时46分 · 曼哈顿上空 · v3.2</title>
+<title>8时46分 · 曼哈顿上空 · v4.5</title>
 <style>
   :root{ --ink:#dfe9f2; --accent:#a8d4f0; --warn:#ff9b9b; --mute:#8fa3b8; --card:rgba(11,18,28,.86); }
   *{box-sizing:border-box}
@@ -18,23 +18,35 @@
   #clock{font-size:15px;letter-spacing:.14em;color:var(--accent);opacity:.92;font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,.8)}
   #phint{margin:-12px 0 20px;font-size:11px;line-height:1.7;letter-spacing:.06em;color:rgba(168,212,240,.52)}
   #phint[hidden]{display:none}
+  /* 摇杆只藏视觉、不删元素：opacity:0 才能保住 getBoundingClientRect 与指针事件
+     （display:none / visibility:hidden 会让原点跑到屏幕左上角或整块失效） */
   #pad{position:absolute;left:calc(16px + env(safe-area-inset-left));bottom:calc(16px + env(safe-area-inset-bottom));
-    border-radius:50%;border:1px solid rgba(168,212,240,.13);background:rgba(168,212,240,.035);opacity:.85}
+    border-radius:50%;border:1px solid rgba(168,212,240,.13);background:rgba(168,212,240,.035);opacity:0}
   #knob{position:absolute;left:50%;top:50%;border-radius:50%;background:rgba(168,212,240,.16);
-    border:1px solid rgba(168,212,240,.22)}
+    border:1px solid rgba(168,212,240,.22);opacity:0}
   #popup{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     background:rgba(4,7,12,.55);transition:opacity .22s cubic-bezier(.16,1,.3,1)}
   #popup.hide{opacity:0;pointer-events:none}
   #card{width:88%;max-width:340px;width:min(340px,88%);padding:26px 24px 22px;background:var(--card);border:1px solid rgba(168,212,240,.16);
     border-radius:10px;text-align:center}
-  #ptitle{margin:0 0 14px;font-size:17px;font-weight:600;letter-spacing:.01em;color:var(--accent);line-height:1.6}
+  #ptitle{margin:0 0 14px;font-size:17px;font-weight:600;letter-spacing:.01em;color:var(--accent);line-height:1.6;white-space:pre-line}
   #ptext{margin:0 0 20px;font-size:12px;line-height:1.95;letter-spacing:.02em;color:#c3d3e0;white-space:pre-line}
-  #prow{display:flex;gap:10px;justify-content:center;align-items:center}
+  #prow{display:flex;gap:8px;justify-content:center;align-items:center}
   button{font:inherit;cursor:pointer;border-radius:8px;border:0;
     transition:transform .12s cubic-bezier(.16,1,.3,1),opacity .2s,background .2s}
   button:active{transform:scale(.97)}
-  #pbtn{background:var(--accent);color:#07101c;padding:10px 26px;font-size:13px;letter-spacing:.16em}
-  #pbtn[disabled]{opacity:.4;cursor:default}
+  /* ---------- 三档难度按钮（开始界面 / 结算卡共用） ---------- */
+  .diffbtn{flex:1;font:inherit;cursor:pointer;border:0;border-radius:8px;
+    background:var(--accent);color:#07101c;padding:10px 0;
+    font-size:12.5px;letter-spacing:.08em;
+    transition:transform .12s,opacity .2s,background .2s}
+  .diffbtn:active{transform:scale(.97)}
+  .diffbtn[disabled]{opacity:.4;cursor:default}
+  .diffbtn.active{box-shadow:inset 0 0 0 2px rgba(7,16,28,.55)}
+  /* 三档底色：明度齐平（都约 78%），深色文字 #07101c 都读得清；normal 沿用 .diffbtn 的淡蓝 */
+  .diffbtn[data-lv="easy"]{background:#a9e0b4}    /* 淡绿 */
+  .diffbtn[data-lv="hard"]{background:#eda6a6}    /* 淡红 */
+  #sharewrap{margin-top:10px;display:flex;justify-content:center}
   #sharebtn{background:transparent;color:rgba(168,212,240,.8);border:1px solid rgba(168,212,240,.28);
     padding:10px 16px;font-size:12px;letter-spacing:.12em}
   #sharebtn[hidden]{display:none}
@@ -43,7 +55,7 @@
   #popup.win #card{background:rgba(26,21,16,.88);border-color:rgba(240,220,184,.22)}
   #popup.win #ptitle{color:#f0dcb8}
   #popup.win #ptext{color:#ece0cd}
-  #popup.win #pbtn{background:#e8cfa6;color:#20180e}
+  #popup.win .diffbtn{background:#e8cfa6;color:#20180e}
   #popup.win #sharebtn{color:rgba(240,220,184,.80);border-color:rgba(240,220,184,.28)}
   /* ---------- 暂停键：低对比小圆点，浮在右上角 ---------- */
   #pausebtn{
@@ -79,7 +91,12 @@
       <h1 id="ptitle">8时46分</h1>
       <p id="ptext">载入中…</p>
       <p id="phint" hidden>右上角可随时暂停 · 不扣时间</p>
-      <div id="prow"><button id="pbtn" disabled>开始</button><button id="sharebtn" hidden>分享</button></div>
+      <div id="prow">
+        <button class="diffbtn" data-lv="easy"   disabled>简单</button>
+        <button class="diffbtn" data-lv="normal" disabled>中等</button>
+        <button class="diffbtn" data-lv="hard"   disabled>困难</button>
+      </div>
+      <div id="sharewrap"><button id="sharebtn" hidden>分享</button></div>
     </div>
   </div>
 </div>
@@ -116,7 +133,7 @@ if (!Element.prototype.closest) {
 var PSPEED = 87.5;              // Hard-1  玩家速度恒定 87.5 逻辑像素/秒
 var EBASE  = 63;                // Hard-1  敌人速度 = 63 + 2.45 × 已过秒数
 var EACC   = 2.45;
-var ECAP   = 120;               // 飞机基准速度上限（23.3 秒到顶，之后不再加速）
+var ECAP   = 120;               // 速度封顶，困难档设为 Infinity
 var JUDGE  = 0.55;              // Hard-2  判定半径 = 视觉半径 × 0.55（同一个半径变量、同一个系数）
                                 // Hard-3  无惯性：位移 = 输入 × 速度 × dt，无加速度/摩擦/缓动/滑行
 var DIFF = 1.0;                 // §0c 全局难度总旋钮：1.0 = 对齐台风游戏；0.85 更简单，1.15 更难
@@ -131,13 +148,17 @@ var PNP = 60;                                   // §14.3 判定采样点数（�
 var DIM = 0.32;                                 // 实景底图压暗系数（0=原图，1=全黑）；0.32 让白客机更跳
 var DTMAX = 0.05;                               // §4 dt 上限
 var MAXTY = 5;                                  // §12.4 同屏上限（5 架：晚期不再挤成一团）
+var IFLOOR = 2.5;                               // §0d 出怪间隔地板（秒），困难档 1.8
+var WIN_T  = 60;                                // §10b 隐藏结局门槛（秒），简单档 30
+var LEVEL  = 'normal';                          // §0d 当前难度：'easy' | 'normal' | 'hard'
 var TAU = Math.PI * 2;
 
 /* ---------------- DOM ---------------- */
 var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 var stage = document.getElementById('stage'), popup = document.getElementById('popup');
 var ptitle = document.getElementById('ptitle'), ptext = document.getElementById('ptext');
-var pbtn = document.getElementById('pbtn'), sharebtn = document.getElementById('sharebtn');
+var sharebtn = document.getElementById('sharebtn');
+var diffBtns = document.querySelectorAll('.diffbtn');
 var phint = document.getElementById('phint');
 var clockEl = document.getElementById('clock');
 var pad = document.getElementById('pad'), knob = document.getElementById('knob');
@@ -223,13 +244,12 @@ function artTick() {
   LOADED++;
   if (LOADED < ART_TOTAL) return;
   READY = true;
-  pbtn.disabled = false;
+  for (var di = 0; di < diffBtns.length; di++) diffBtns[di].disabled = false;
   if (!HITM) buildHitMask();
   if (!running && !over) {
-    ptitle.textContent = '8时46分';
-    ptext.textContent = '拖动世贸双塔，避开从四面八方袭来的客机。\n你躲开的每一秒，都在替纽约走完今天的时刻。';
+    ptitle.textContent = '穷玩车，富玩表，\n顶富玩双子塔快跑';
+    ptext.textContent = '通过「∞」的方式操作双子塔，躲避中东最好的飞行员。';
     phint.hidden = false;
-    pbtn.textContent = '开始';
   }
   draw();
 }
@@ -395,7 +415,7 @@ function update(dt) {
   elapsed += dt;
 
   // 隐藏结局：先判存活满 60 秒，再做碰撞判定 —— 第 60 秒那一帧即使客机压上来，也判活下来了
-  if (!win && elapsed >= 60) { winStart(); return; }
+  if (!win && elapsed >= WIN_T) { winStart(); return; }
 
   // 玩家：无惯性，输入直接成速度；撞边即停，不反弹
   jp.x = Math.max(BX0, Math.min(BX1, jp.x + vx * PSPEED * dt));
@@ -441,7 +461,7 @@ function update(dt) {
 
   // §7 出怪：4 秒收敛到 1.5 秒
   spawnT += dt;
-  var interval = Math.max(2.5, 4 - elapsed * 0.08) / DIFF;   // 地板 2.5s：前 18.75 秒不变，之后每 2.5 秒一架
+  var interval = Math.max(IFLOOR, 4 - elapsed * 0.08) / DIFF;   // 地板 IFLOOR：中等/简单 2.5（前 18.75 秒不变），困难 1.8
   if (spawnT > interval && ty.length < MAXTY) { spawnT = 0; spawn(); }
 
   // §8 判定：玩家轮廓逐点 vs 威胁半径 × 0.55
@@ -471,11 +491,11 @@ function die(px, py) {
 /* ---------------- §10 结算 ---------------- */
 function showResult() {
   var c = hit.clock, s = hit.site;
-  ptitle.textContent = titleText(c);
-  ptext.textContent = '今日' + c.period + '，美国发生一系列严重航空恐怖袭击事件。\n' +
+  ptitle.textContent = '结局：孩子们，我肘不过飞机';
+  ptext.textContent = '9月11日' + c.period + '，美国发生一系列严重航空恐怖袭击事件。\n' +
     '美国东部时间' + c.period + c.h12 + '时' + pad2(c.mm) + '分左右，\n' +
     '一架被劫持的民航客机' + s.text + '，\n造成大量人员伤亡。';
-  pbtn.textContent = '再来一次';
+  markLevel();
   sharebtn.hidden = false;
   pausebtn.hidden = true;
   phint.hidden = true;
@@ -492,13 +512,14 @@ function winStart() {
 function showWin() {
   var c = gameClock(elapsed);              // elapsed = 60 → 9时46分
   popup.classList.add('win');
-  ptitle.textContent = '纽约，2001年9月11日 上午 ' + c.h12 + '时' + pad2(c.mm) + '分';
+  ptitle.textContent = '隐藏结局：911从未发生';
   ptext.textContent =
     '纽约的清晨依旧匆忙。\n' +
     '地铁里人们低头看报，咖啡杯冒着热气。\n' +
     '双子塔的影子斜斜铺在街道上，游客举着相机笑，街角的热狗摊排着队。\n' +
-    '911从未发生—— 纽约，2001年9月11日 上午' + c.h12 + '时' + pad2(c.mm) + '分';
-  pbtn.textContent = '再来一次';
+    '911从未发生—— 纽约，2001年9月11日 上午' + c.h12 + '时' + pad2(c.mm) + '分\n' +
+    'PS：飞机：666这么会玩，给你了兄弟';
+  markLevel();
   sharebtn.hidden = false;
   phint.hidden = true;
   popup.classList.remove('hide');
@@ -681,12 +702,8 @@ function drawThreat(t) {
   }
   ctx.restore();
 
-  // 判定圈必须可见：外圈 = 视觉半径，内圈 = 半径 × 0.55
+  // 判定圈：只画红圈（半径 × 0.55），不再画视觉半径的黄圈
   ctx.lineWidth = 1.2;
-  ctx.strokeStyle = 'rgba(255,214,130,.72)';
-  ctx.beginPath();
-  ctx.arc(t.x, t.y, t.r, 0, TAU);
-  ctx.stroke();
   ctx.strokeStyle = 'rgba(255,122,122,.85)';
   ctx.beginPath();
   ctx.arc(t.x, t.y, t.r * JUDGE, 0, TAU);
@@ -843,14 +860,31 @@ function init() {
   release();
   popup.classList.remove('hide');
   sharebtn.hidden = true;
-  ptitle.textContent = '8时46分';
+  ptitle.textContent = '穷玩车，富玩表，\n顶富玩双子塔快跑';
   ptext.textContent = READY
-    ? '拖动世贸双塔，避开从四面八方袭来的客机。\n你躲开的每一秒，都在替纽约走完今天的时刻。'
+    ? '通过「∞」的方式操作双子塔，躲避中东最好的飞行员。'
     : '载入中…';
   phint.hidden = !READY;
-  pbtn.textContent = '开始';
-  pbtn.disabled = !READY;
+  for (var di = 0; di < diffBtns.length; di++) diffBtns[di].disabled = !READY;
+  markLevel();
   draw();
+}
+
+/* ---------------- §0d 三档难度：只调密度与封顶，斜率与其余数值不动 ---------------- */
+var LV_NAME = { easy: '简单', normal: '中等', hard: '困难' };
+function markLevel() {
+  var inResult = over || win;                    // 是否处在结算（失败/隐藏结局）状态
+  for (var i = 0; i < diffBtns.length; i++) {
+    var b = diffBtns[i], lv = b.getAttribute('data-lv'), cur = (lv === LEVEL);
+    b.textContent = (inResult && cur) ? '再来一次' : LV_NAME[lv];
+    b.classList.toggle('active', cur);
+  }
+}
+function setLevel(lv) {
+  if (lv === 'easy') { LEVEL = 'easy'; MAXTY = 5; IFLOOR = 2.5; ECAP = 120; WIN_T = 30; }
+  else if (lv === 'hard') { LEVEL = 'hard'; MAXTY = 6; IFLOOR = 1.8; ECAP = Infinity; WIN_T = 60; }
+  else { LEVEL = 'normal'; MAXTY = 5; IFLOOR = 2.5; ECAP = 120; WIN_T = 60; }   // normal
+  markLevel();
 }
 
 function start() {
@@ -867,7 +901,14 @@ function start() {
   last = performance.now();
   raf = requestAnimationFrame(loop);
 }
-pbtn.addEventListener('click', start);
+for (var bi = 0; bi < diffBtns.length; bi++) {
+  (function (btn) {
+    btn.addEventListener('click', function () {
+      setLevel(btn.getAttribute('data-lv'));
+      start();
+    });
+  })(diffBtns[bi]);
+}
 
 /* ---------------- §10 分享 ---------------- */
 sharebtn.addEventListener('click', function () {
